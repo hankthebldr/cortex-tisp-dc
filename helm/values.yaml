@@ -1,0 +1,175 @@
+# Default values for app-template
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+k8s:
+  # CHANGE THIS to your application name
+  app_name: "my-app"
+
+  # Port configuration
+  # Standard: All apps listen on port 8080 (simplifies deployment)
+  app_port: 80              # Service port (external facing - keep at 80)
+  app_targetPort: 8080      # Container port (apps should listen on 8080)
+  app_containerPort: 8080   # Container port (same as targetPort)
+
+  # Number of replicas
+  replicas: 1
+
+# Docker image configuration
+image:
+  # Image is automatically constructed as: registry/app_name:tag
+  registry: docker-ra.art.code.pan.run
+
+  # Optional: Override if GitLab project name differs from app_name
+  # Uncomment and set if needed:
+  # repo: docker-ra.art.code.pan.run/gitlab-project-name
+
+  tag: latest
+  pullPolicy: Always
+
+# GCP Configuration
+gcp:
+  # GCP project ID
+  project_id: wwss-as-trust-dev
+
+  # Note: Service account name is automatically set to k8s.app_name
+  # Kubernetes SA: {app_name}-sa
+  # GCP SA: {app_name}@{project_id}.iam.gserviceaccount.com
+
+# Observability (OpenTelemetry traces + metrics)
+# See doc/TELEMETRY-SETUP.md and the two prompts (Instrumentation_prompt.md,
+# Metrics_prompt.md) for the application-side work that consumes these settings.
+observability:
+  # Master switch. When false, NO OTEL wiring is applied — apps run unchanged.
+  # Flip to true after applying Instrumentation_prompt.md.
+  enabled: false
+
+  # SDK bootstrap mode. Two mutually exclusive patterns:
+  #
+  #   "app-bootstrap" (DEFAULT, preferred): The app itself sets up TracerProvider
+  #     + MeterProvider + LoggerProvider via a bootstrap file (bootstrap.py for
+  #     Python, instrumentation.mjs for Node). Every provider, reader, and
+  #     exporter is visible in one file — no operator magic, no silent
+  #     auto-config gaps. See Instrumentation_prompt.md for the canonical
+  #     bootstrap.py pattern.
+  #
+  #   "operator-injected" (escape hatch): The OTEL Operator mutates the pod at
+  #     admission time — injects an init container that ships the SDK, sets
+  #     OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_PROPAGATORS, OTEL_TRACES_SAMPLER*
+  #     from the "observability/otel-<language>" Instrumentation CR.
+  #     KNOWN SILENT-FAILURE GOTCHAS:
+  #     - Python: MeterProvider is auto-configured but NO MetricReader is
+  #       attached for custom code. Custom metrics silently discard.
+  #     - Node ESM / Next.js: init container can't hook the runtime cleanly.
+  #     Prefer app-bootstrap; use operator-injected only if you cannot ship a
+  #     bootstrap file (rare).
+  mode: app-bootstrap
+
+  # Language for operator-injected mode. Selects which Instrumentation CR the
+  # annotation references (observability/otel-<language>). Values: python,
+  # nodejs, java, dotnet, go. Ignored when mode=app-bootstrap.
+  language: python
+
+  # OTEL collector endpoint. USED ONLY in mode=app-bootstrap. In operator-
+  # injected mode the endpoint comes from the Instrumentation CR and this
+  # value is ignored (setting it in the pod would override the CR).
+  otlp_endpoint: http://otel-agent.observability.svc.cluster.local:4318
+
+  # Per-signal exporters. "otlp" = enabled, "none" = disabled. Per-app switches,
+  # apply in BOTH modes. Traces are usually on once instrumented; metrics stay
+  # off until the app actually has instruments wired (see Metrics_prompt.md).
+  traces_exporter: otlp
+  metrics_exporter: none
+  logs_exporter: none
+
+  # Trace sampler argument. USED ONLY in mode=app-bootstrap. In operator-
+  # injected mode the sampler comes from the Instrumentation CR.
+  traces_sampler_arg: "1.0"
+
+# Onboarding automation (consumed by onboard pipeline).
+# Trigger: CI/CD → Pipelines → Run pipeline → RUN_ONBOARD=true.
+# Opens MRs in the three infra repos. See doc/ONBOARDING-AUTOMATION.md.
+onboarding:
+  # Kubernetes namespace this app deploys into. Drives the Workload Identity
+  # binding member (`<project>.svc.id.goog[<namespace>/<app>-sa]`) in the
+  # generated terraform AND the GKE-console runbook URLs in alert policies.
+  # Default "applications" matches the standard app-template deploy. Override
+  # ONLY for legacy apps deployed to a different namespace (e.g. firebot).
+  # Must match the namespace the helm install actually targets.
+  k8s_namespace: "applications"
+
+  # Where IAM role grants land. Empty (default) = grant on the app's own GCP
+  # project — wwss-as-trust-dev in dev, wwss-as-trust-prod in prod, resolved
+  # via var.gcp_project in the terraform module. This matches what every
+  # existing app does. Set this only in the rare case the app genuinely needs
+  # IAM grants on a different project.
+  iam_target_project: ""
+
+  # GCP IAM roles to grant the app's service account.
+  # Must be in onboarding-ci/allowed_roles.txt (or set ALLOW_ELEVATED=true).
+  # Example:
+  #   - roles/bigquery.dataViewer
+  #   - roles/bigquery.jobUser
+  #   - roles/storage.objectViewer
+  iam_roles: []
+
+  # Generate the standard alert policies for this app (tRPC error rate, p95
+  # latency, in-flight saturation, heartbeat absence). See doc/Metrics_prompt.md
+  # and doc/Instrumentation_prompt.md for the instrumentation contract.
+  #
+  # ⚠️  ORDER OF OPERATIONS MATTERS. GCP Monitoring validates PromQL metric
+  #     names against GMP at alert-CREATE time (not at evaluation time). If a
+  #     referenced metric has no series in GMP yet, `terraform apply` fails with
+  #     `Error 400: invalid PromQL metric` and those alerts don't get created.
+  #     Only the heartbeat alert (`absent_over_time`) is exempt.
+  #
+  # Correct workflow:
+  #   1. Onboard with enable_alerts: false → deploys app + creates SA/IAM
+  #   2. Exercise the app so tRPC procedures fire (count + bucket + inflight
+  #      series appear in GMP) — confirm in Metrics Explorer with PromQL
+  #   3. Flip enable_alerts: true and re-run onboard → alerts apply cleanly
+  #
+  # Standard metric names assumed:
+  #   <app_name_underscore>_heartbeat_total
+  #   <app_name_underscore>_trpc_request_duration_seconds_{count,bucket}
+  #   <app_name_underscore>_trpc_inflight
+  enable_alerts: false
+
+# Resource limits (optional - uncomment to enable)
+# resources:
+#   requests:
+#     memory: "256Mi"
+#     cpu: "100m"
+#   limits:
+#     memory: "512Mi"
+#     cpu: "500m"
+
+# Environment variables (optional - add your env vars here)
+# Database configuration (if your app needs a database)
+# Uncomment and customize these:
+# env:
+#   - name: NODE_ENV
+#     value: "production"
+#   - name: DB_USER
+#     value: "my-app"
+#   - name: DB_NAME
+#     value: "my-app"
+#   - name: DB_PORT
+#     value: "5432"
+
+# SSO Configuration (nginx + goggles for authentication)
+# Set disable_sso: true to bypass SSO and route directly to your app
+disable_sso: false
+
+# SSO Docker images
+sso_images:
+  nginx: nginx:1.30.1   # CVE-2026-42945 patched
+  goggles: registry.gitlab.com/panw-gse/ts/goggles:0.1.0
+
+# Auth URLs (will be overridden by dev.yaml/prod.yaml)
+vouch_url: https://auth.tsdev.paloaltonetworks.com
+auth_public_key_url: https://auth.tsdev.paloaltonetworks.com/public-key
+
+# Hostname is automatically constructed as:
+# - Dev: {app_name}.tsdev.paloaltonetworks.com
+# - Prod: {app_name}.ts.paloaltonetworks.com

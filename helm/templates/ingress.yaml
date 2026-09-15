@@ -1,0 +1,42 @@
+{{- $hostname := "" }}
+{{- if contains "dev" .Values.gcp.project_id }}
+  {{- $hostname = printf "%s.tsdev.paloaltonetworks.com" .Values.k8s.app_name }}
+{{- else }}
+  {{- $hostname = printf "%s.ts.paloaltonetworks.com" .Values.k8s.app_name }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.k8s.app_name }}-ingress
+  annotations:
+    # SSL redirect
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Client body size (adjust if your app needs to handle large uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - {{ $hostname }}
+      secretName: tls-credential
+  rules:
+    - host: {{ $hostname }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                {{- if .Values.disable_sso }}
+                name: {{ .Values.k8s.app_name }}-svc
+                port:
+                  number: {{ .Values.k8s.app_port }}
+                {{- else }}
+                name: {{ .Values.k8s.app_name }}-nginx-svc
+                port:
+                  number: 80
+                {{- end }}

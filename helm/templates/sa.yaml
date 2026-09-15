@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.k8s.app_name }}-sa
+  annotations:
+    # Workload Identity: Bind Kubernetes SA to GCP SA
+    # Create a GCP service account first and grant it necessary permissions
+    # Then bind it using: gcloud iam service-accounts add-iam-policy-binding
+    iam.gke.io/gcp-service-account: {{ .Values.k8s.app_name }}@{{ .Values.gcp.project_id }}.iam.gserviceaccount.com

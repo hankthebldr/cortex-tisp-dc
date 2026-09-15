@@ -1,0 +1,162 @@
+{{- if not .Values.disable_sso }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.k8s.app_name }}-goggles-config-map
+data:
+  goggles.yaml: |
+    pk_url: {{ .Values.auth_public_key_url }}
+    default_action: permit
+    unauthenticated_paths:
+      - /health
+      - /api/health
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.k8s.app_name }}-nginx-config-map
+data:
+  nginx.conf : |
+    user  nginx;
+    worker_processes  auto;
+
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        proxy_buffer_size          64k;
+        proxy_buffers            4 128k;
+        proxy_busy_buffers_size    128k;
+        client_header_buffer_size 64k;
+        large_client_header_buffers 4 64k;
+        client_max_body_size 10m;
+
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /var/log/nginx/access.log  main;
+
+        sendfile        on;
+        keepalive_timeout  65;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+
+        server {
+            listen 80;
+
+            auth_request /goggles-validate;
+            auth_request_set $auth_username $upstream_http_x_username;
+            auth_request_set $auth_first_name $upstream_http_x_first_name;
+            auth_request_set $auth_last_name $upstream_http_x_last_name;
+            auth_request_set $auth_groups $upstream_http_x_groups;
+            add_header Set-Cookie userinfo=$auth_username,$auth_first_name,$auth_last_name;
+
+            location = /goggles-validate {
+                proxy_pass http://localhost:8000/validate;
+                proxy_pass_request_body off;
+
+                proxy_set_header Host $http_host;
+                proxy_set_header Content-Length "";
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Method $request_method;
+                proxy_set_header X-Original-URI $request_uri;
+
+                auth_request_set $auth_resp_jwt $upstream_http_x_vouch_jwt;
+                auth_request_set $auth_resp_err $upstream_http_x_vouch_err;
+                auth_request_set $auth_resp_failcount $upstream_http_x_vouch_failcount;
+            }
+
+            location / {
+                proxy_pass http://{{ .Values.k8s.app_name }}-svc:{{ .Values.k8s.app_port }}/;
+                proxy_set_header Host $http_host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Username $auth_username;
+                proxy_set_header X-First-Name $auth_first_name;
+                proxy_set_header X-Last-Name $auth_last_name;
+                proxy_set_header X-Groups $auth_groups;
+            }
+
+            error_page 401 = @error401;
+
+            # If the user is not logged in, redirect them to Vouch's login URL
+            location @error401 {
+                return 302 {{ .Values.vouch_url }}/login?url=https://$http_host$request_uri&vouch-failcount=$auth_resp_failcount&X-Vouch-Token=$auth_resp_jwt&error=$auth_resp_err;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.k8s.app_name }}-nginx-deployment
+  labels:
+    app: {{ .Values.k8s.app_name }}-nginx
+    role: proxy
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ .Values.k8s.app_name }}-nginx
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.k8s.app_name }}-nginx
+        role: proxy
+    spec:
+      imagePullSecrets:
+      - name: docker-regcred
+      - name: dependency-proxy-secret
+
+      containers:
+      - name: {{ .Values.k8s.app_name }}-nginx
+        image: {{ .Values.sso_images.nginx }}
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 80
+          - containerPort: 443
+        volumeMounts:
+          - name: nginx-config
+            mountPath: /etc/nginx
+
+      - name: {{ .Values.k8s.app_name }}-goggles
+        image: {{ .Values.sso_images.goggles }}
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8000
+        volumeMounts:
+          - name: goggles-config
+            mountPath: /goggles
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: "{{ .Values.k8s.app_name }}-nginx-config-map"
+        - name: goggles-config
+          configMap:
+            name: "{{ .Values.k8s.app_name }}-goggles-config-map"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.k8s.app_name }}-nginx-svc
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: {{ .Values.k8s.app_name }}-nginx
+{{- end }}

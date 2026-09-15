@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Values.k8s.app_name }}-deployment"
+  labels:
+    app: {{ .Values.k8s.app_name }}
+    # Standard K8s recommended labels. `app.kubernetes.io/instance` is what
+    # triage-bot uses to look up the source repo (must equal repo/app_name;
+    # enforced by app-template's app_name === GitLab project name convention).
+    app.kubernetes.io/name: {{ .Values.k8s.app_name }}
+    app.kubernetes.io/instance: {{ .Values.k8s.app_name }}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: {{ .Values.k8s.replicas }}
+  revisionHistoryLimit: 3  # Keep only 3 old ReplicaSets for rollback
+  selector:
+    matchLabels:
+      app: {{ .Values.k8s.app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.k8s.app_name }}
+        app.kubernetes.io/name: {{ .Values.k8s.app_name }}
+        app.kubernetes.io/instance: {{ .Values.k8s.app_name }}
+        app.kubernetes.io/managed-by: Helm
+      {{- if and .Values.observability.enabled (eq .Values.observability.mode "operator-injected") }}
+      annotations:
+        # OTEL Operator auto-instrumentation. The operator mutates this pod at
+        # admission time: injects an init container that ships the SDK + auto-
+        # instrumentation libraries for {{ .Values.observability.language }},
+        # and sets OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_PROPAGATORS /
+        # OTEL_TRACES_SAMPLER* from the Instrumentation CR.
+        instrumentation.opentelemetry.io/inject-{{ .Values.observability.language }}: "observability/otel-{{ .Values.observability.language }}"
+      {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.k8s.app_name }}-sa
+      # Pull secret for PANW Artifactory (docker-ra.art.code.pan.run).
+      # Pre-provisioned as `artifactory-regcred` in every namespace (mittwald-
+      # replicated from us-gke-trust-{dev,prod}-system/artifactory-regcred/).
+      # Kubelet only uses it when image host matches — no harm when pulling
+      # from docker-io or other registries. Coexists safely with anonymous
+      # pulls during pre-lockdown; takes over when EP flips auth-required.
+      imagePullSecrets:
+        - name: artifactory-regcred
+      containers:
+        - name: {{ .Values.k8s.app_name }}
+          image: {{ .Values.image.repo | default (printf "%s/%s" .Values.image.registry .Values.k8s.app_name) }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - containerPort: {{ .Values.k8s.app_containerPort }}
+
+          # Environment variables
+          env:
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "{{ .Values.gcp.project_id }}"
+            {{- if .Values.observability.enabled }}
+            # OpenTelemetry — see doc/TELEMETRY-SETUP.md.
+            # Per-app settings (apply in both operator-injected and app-bootstrap modes):
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.k8s.app_name | quote }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ .Values.observability.traces_exporter | quote }}
+            - name: OTEL_METRICS_EXPORTER
+              value: {{ .Values.observability.metrics_exporter | quote }}
+            - name: OTEL_LOGS_EXPORTER
+              value: {{ .Values.observability.logs_exporter | quote }}
+            {{- if eq .Values.observability.mode "app-bootstrap" }}
+            # app-bootstrap mode: endpoint, protocol, propagators, sampler are
+            # set on the pod because the app's own SDK bootstrap reads them.
+            # In operator-injected mode these come from the Instrumentation CR
+            # and MUST NOT be set here (pod-level env would override the CR).
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlp_endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.observability.traces_sampler_arg | quote }}
+            # Stable HTTP semantic conventions. Required by
+            # @opentelemetry/instrumentation-http >= 0.55 (OTEL Node 2.x line)
+            # to emit the stable `http.server.request.duration` metric —
+            # without this env, only legacy metric names fire and the modern
+            # name is silently missing. `http/dup` emits both stable + legacy.
+            # Harmless on the OTEL 1.x line and on Python (unrecognized env).
+            - name: OTEL_SEMCONV_STABILITY_OPT_IN
+              value: "http/dup"
+            {{- end }}
+            {{- end }}
+            {{- if .Values.env }}
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            {{- end }}
+
+          # Resource limits (optional)
+          {{- if .Values.resources }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+
+          # Health checks (optional - customize to your app's health endpoint)
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: {{ .Values.k8s.app_containerPort }}
+          #   initialDelaySeconds: 30
+          #   periodSeconds: 10
+          #   timeoutSeconds: 5
+          #   failureThreshold: 3
+          #
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: {{ .Values.k8s.app_containerPort }}
+          #   initialDelaySeconds: 10
+          #   periodSeconds: 5
+          #   timeoutSeconds: 3
+          #   failureThreshold: 3

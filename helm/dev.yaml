@@ -1,0 +1,35 @@
+# Development environment overrides
+# Hostname is automatically constructed as: {app_name}.tsdev.paloaltonetworks.com
+
+# Image tag (updated automatically by CI/CD)
+image:
+  tag: "latest"
+
+# GCP Dev Project
+gcp:
+  project_id: wwss-as-trust-dev
+
+# SSO Authentication URLs
+vouch_url: https://auth.tsdev.paloaltonetworks.com
+auth_public_key_url: https://auth.tsdev.paloaltonetworks.com/public-key
+
+# Dev-specific environment variables (if needed)
+# IMPORTANT: Helm REPLACES entire arrays, does NOT merge them!
+# If you define 'env:' here, you must include ALL env vars from values.yaml
+# plus your dev-specific ones. Otherwise env vars from values.yaml will be lost.
+#
+# Database connection (if your app uses PostgreSQL)
+# env:
+#   # Copy ALL env vars from values.yaml here first
+#   - name: NODE_ENV
+#     value: "production"
+#   # Then add dev-specific overrides
+#   - name: DB_HOST
+#     value: "postgres.tsdev.paloaltonetworks.com"
+#   - name: DB_PASS
+#     valueFrom:
+#       secretKeyRef:
+#         name: gitlabvars
+#         key: DB_PASSWORD
+#   - name: LOG_LEVEL
+#     value: "debug"

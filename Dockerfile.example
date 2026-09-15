@@ -1,0 +1,146 @@
+# Dockerfile Example - Customize for Your Language/Framework
+#
+# This is a TEMPLATE. Replace the contents with your language-specific Dockerfile.
+# See EXAMPLES.md for Dockerfile examples for different languages.
+#
+# REQUIREMENTS:
+# 1. Your app must listen on port 8080 (standardized across all languages)
+# 2. Your app must have a /health endpoint that returns HTTP 200
+# 3. Use multi-stage builds to keep image size small
+# 4. Run as non-root user for security
+# 5. EXPOSE 8080 in your Dockerfile
+#
+# BASE IMAGES — READ THIS BEFORE PICKING ONE:
+#
+# The PANW corporate proxy does SSL inspection on ALL outbound HTTPS. Standard
+# base images don't trust the PANW Enterprise CA G2 cert, so any HTTPS request
+# during `docker build` fails with:
+#     SSL: CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain
+#
+# Use the proven pattern for your language — do NOT guess at image tags.
+#
+# PYTHON — plain proxy image + pip --trusted-host. Verified working.
+#   FROM docker-io.art.code.pan.run/library/python:3.11-slim
+#   RUN pip install --no-cache-dir \
+#         --trusted-host pypi.org \
+#         --trusted-host files.pythonhosted.org \
+#         -r requirements.txt
+#   (Do NOT try build-tools--image-python EP tags — they do not exist in
+#    Artifactory as of 2026-07-01; kaniko returns MANIFEST_UNKNOWN.)
+#
+# NODE — EP image (has PANW CA G2 pre-installed) for anything with a build step:
+#   FROM docker.art.code.pan.run/build-tools--image-node:20-bullseye.ep9
+#   USER root   # EP images default to non-root; switch for npm ci / apt-get
+#
+# GO / STAGES WITHOUT NETWORK — plain proxy image is fine:
+#   docker-io.art.code.pan.run/library/golang:1.21-alpine
+#   docker-io.art.code.pan.run/library/node:20-alpine  # only if no npm ci
+#   docker-io.art.code.pan.run/library/alpine:latest
+#
+# See doc/DOCKER-BASE-IMAGES.md for full details and the SSL-error FAQ.
+
+# ==========================================
+# Example for Node.js/Express (Simple - No Build Step)
+# ==========================================
+# Use this for simple Node.js apps that just run .js files (no TypeScript, no build)
+FROM docker-io.art.code.pan.run/library/node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+# Use npm ci (NOT --only=production) - you need devDependencies if your app has a build step
+RUN npm ci
+COPY . .
+
+FROM docker-io.art.code.pan.run/library/node:20-alpine
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+WORKDIR /app
+COPY --from=builder --chown=nodejs:nodejs /app .
+USER nodejs
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+CMD ["node", "server.js"]
+
+# ==========================================
+# Example for Next.js (Downloads Google Fonts, TypeScript, etc.)
+# ==========================================
+# Use EP-provided image with PANW CA certs - required for downloading external resources
+# FROM docker.art.code.pan.run/build-tools--image-node:20-bullseye.ep9
+#
+# # EP images run as non-root user by default, switch to root for system packages
+# USER root
+#
+# WORKDIR /app
+#
+# # Optional: Install system packages (e.g., Chromium for Puppeteer)
+# # RUN apt-get update && apt-get install -y chromium fonts-liberation --no-install-recommends && rm -rf /var/lib/apt/lists/*
+#
+# # Copy package files and install ALL dependencies (including devDependencies)
+# # DO NOT use --only=production - Next.js needs devDependencies for build!
+# COPY package*.json ./
+# RUN npm ci
+#
+# # Copy source code and build
+# COPY . .
+# ENV NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production
+# RUN npm run build
+#
+# # Set ownership and switch back to non-root user (nodeuser is pre-created in EP image)
+# RUN chown -R nodeuser:nodeuser /app
+# USER nodeuser
+#
+# ENV PORT=8080 HOSTNAME="0.0.0.0"
+# EXPOSE 8080
+# HEALTHCHECK --interval=30s --timeout=3s CMD node -e "require('http').get('http://localhost:8080/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+# CMD ["npm", "start"]
+
+# ==========================================
+# Example for Python/Flask
+# ==========================================
+# Plain proxy image + pip --trusted-host — PANW proxy MITMs pypi.org.
+# --trusted-host tells pip to accept the proxy's cert. Verified working.
+# FROM docker-io.art.code.pan.run/library/python:3.11-slim
+# WORKDIR /app
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir \
+#       --trusted-host pypi.org \
+#       --trusted-host files.pythonhosted.org \
+#       -r requirements.txt
+# COPY . .
+# EXPOSE 8080
+# HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+# CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+
+# ==========================================
+# Example for Go
+# ==========================================
+# FROM docker-io.art.code.pan.run/library/golang:1.21-alpine AS builder
+# WORKDIR /app
+# COPY go.mod go.sum ./
+# RUN go mod download
+# COPY . .
+# RUN CGO_ENABLED=0 GOOS=linux go build -o server
+#
+# FROM docker-io.art.code.pan.run/library/alpine:latest
+# RUN addgroup -g 1001 -S appuser && adduser -S appuser -u 1001
+# WORKDIR /app
+# COPY --from=builder --chown=appuser:appuser /app/server .
+# USER appuser
+# EXPOSE 8080
+# HEALTHCHECK --interval=30s --timeout=3s CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+# CMD ["./server"]
+
+# ==========================================
+# Example for Python/FastAPI
+# ==========================================
+# Plain proxy image + pip --trusted-host — PANW proxy MITMs pypi.org.
+# Verified working in py-observability-smoketest.
+# FROM docker-io.art.code.pan.run/library/python:3.11-slim
+# WORKDIR /app
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir \
+#       --trusted-host pypi.org \
+#       --trusted-host files.pythonhosted.org \
+#       -r requirements.txt
+# COPY . .
+# EXPOSE 8080
+# HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

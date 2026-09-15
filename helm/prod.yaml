@@ -1,0 +1,48 @@
+# Production environment overrides
+# Hostname is automatically constructed as: {app_name}.ts.paloaltonetworks.com
+
+# Image tag (updated automatically by CI/CD)
+image:
+  tag: "latest"
+
+# GCP Prod Project
+gcp:
+  project_id: wwss-as-trust-prod
+
+# SSO Authentication URLs
+vouch_url: https://auth.ts.paloaltonetworks.com
+auth_public_key_url: https://auth.ts.paloaltonetworks.com/public-key
+
+# Prod-specific configuration
+k8s:
+  replicas: 2  # More replicas for HA
+
+# Higher resource limits for production (optional)
+# resources:
+#   requests:
+#     memory: "512Mi"
+#     cpu: "200m"
+#   limits:
+#     memory: "1Gi"
+#     cpu: "1000m"
+
+# Prod-specific environment variables (if needed)
+# IMPORTANT: Helm REPLACES entire arrays, does NOT merge them!
+# If you define 'env:' here, you must include ALL env vars from values.yaml
+# plus your prod-specific ones. Otherwise env vars from values.yaml will be lost.
+#
+# Database connection (if your app uses PostgreSQL)
+# env:
+#   # Copy ALL env vars from values.yaml here first
+#   - name: NODE_ENV
+#     value: "production"
+#   # Then add prod-specific overrides
+#   - name: DB_HOST
+#     value: "postgres.ts.paloaltonetworks.com"
+#   - name: DB_PASS
+#     valueFrom:
+#       secretKeyRef:
+#         name: gitlabvars
+#         key: DB_PASSWORD
+#   - name: LOG_LEVEL
+#     value: "info"
