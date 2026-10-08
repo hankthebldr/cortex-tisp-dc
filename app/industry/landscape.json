@@ -1,0 +1,42 @@
+{
+  "Healthcare": [
+    "Ransomware and double-extortion remain the dominant threat to care delivery, with EHR downtime directly impacting patient safety.",
+    "Legacy and unmanaged medical / IoT devices expand the attack surface beyond traditional endpoints.",
+    "Commodity infostealers harvest credentials that feed targeted intrusions into clinical systems."
+  ],
+  "Finance": [
+    "Banking trojans and infostealers target credential theft and fraudulent transfers.",
+    "Supply-chain and third-party fintech integrations broaden exposure.",
+    "Regulatory pressure (PCI, GLBA) raises the cost of dwell time and undetected lateral movement."
+  ],
+  "Retail": [
+    "POS malware and web-skimming (Magecart-style) target cardholder data at scale.",
+    "Seasonal traffic spikes are exploited to hide malicious activity in the noise.",
+    "Botnet / credential-stuffing pressure on customer accounts and loyalty programs."
+  ],
+  "Critical Infrastructure": [
+    "State-aligned actors probe OT / ICS environments for pre-positioning.",
+    "IT / OT convergence lets commodity malware reach operational networks.",
+    "Living-off-the-land techniques evade signature-based controls."
+  ],
+  "Manufacturing": [
+    "Ransomware against production lines causes outsized operational and revenue impact.",
+    "IP theft via RATs and infostealers targets designs and process data.",
+    "Flat OT networks accelerate lateral movement once a foothold exists."
+  ],
+  "Government": [
+    "Nation-state espionage and credential harvesting target sensitive data.",
+    "Legacy systems and constrained budgets slow patch and detection cycles.",
+    "Supply-chain compromise is a recurring intrusion vector."
+  ],
+  "Technology": [
+    "Source-code and CI/CD pipelines are high-value targets for supply-chain attacks.",
+    "Infostealers harvesting developer credentials lead to cloud-account takeover.",
+    "Fast release cadence can outpace security validation."
+  ],
+  "Education": [
+    "Open networks and BYOD broaden the endpoint attack surface.",
+    "Ransomware disrupts academic operations and exposes research IP.",
+    "Credential phishing targets faculty and staff for downstream access."
+  ]
+}

@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile.dev
+    volumes:
+      - ..:/workspace:cached
+      - tisp-pip-cache:/home/appuser/.cache/pip
+    working_dir: /workspace
+    command: sleep infinity
+    ports:
+      - "8080:8080"
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      OUTPUT_DIR: "/workspace/out"
+      LOG_LEVEL: "DEBUG"
+      SINKHOLE_IP: "72.5.65.111"
+    env_file:
+      - ../.env
+
+volumes:
+  tisp-pip-cache:

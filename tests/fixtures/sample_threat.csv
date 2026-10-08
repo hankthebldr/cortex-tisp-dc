@@ -1,0 +1,16 @@
+Receive Time,Source address,Destination address,Application,Action,Severity,Subtype,Threat/Content Name
+2026-06-01 09:12,10.0.0.10,185.220.101.45,dns,alert,critical,spyware,NanoCore RAT Command and Control Traffic Detection
+2026-06-01 09:14,10.0.0.10,185.220.101.45,dns,alert,critical,spyware,NanoCore RAT Command and Control Traffic Detection
+2026-06-01 09:20,10.0.0.10,91.219.236.18,web-browsing,alert,high,spyware,Sality Command and Control Traffic
+2026-06-01 10:02,10.0.0.55,185.220.101.45,dns,alert,critical,spyware,NanoCore RAT Command and Control Traffic Detection
+2026-06-01 10:08,10.0.0.55,8.8.8.8,dns,alert,medium,spyware,Suspicious DNS Query
+2026-06-01 11:00,10.0.0.72,45.142.212.61,ssl,alert,high,spyware,AgentTesla Command and Control Traffic
+2026-06-01 11:15,10.0.0.72,45.142.212.61,ssl,alert,high,spyware,AgentTesla Command and Control Traffic
+2026-06-01 12:01,10.0.0.91,194.165.16.77,web-browsing,alert,critical,spyware,Cobalt Strike Beacon C2
+2026-06-01 12:30,10.0.0.10,8.8.8.8,dns,alert,medium,spyware,Suspicious DNS Query
+2026-06-01 13:11,10.0.0.55,91.219.236.18,web-browsing,alert,high,spyware,Sality Command and Control Traffic
+2026-06-01 14:05,10.0.0.120,45.142.212.61,ssl,alert,high,spyware,AgentTesla Command and Control Traffic
+2026-06-01 14:40,10.0.0.10,194.165.16.77,web-browsing,alert,critical,spyware,Cobalt Strike Beacon C2
+2026-06-01 15:00,10.0.0.91,185.220.101.45,dns,alert,critical,spyware,NanoCore RAT Command and Control Traffic Detection
+2026-06-01 15:22,10.0.0.72,91.219.236.18,web-browsing,alert,high,spyware,Sality Command and Control Traffic
+2026-06-01 16:10,10.0.0.55,45.142.212.61,ssl,alert,high,spyware,AgentTesla Command and Control Traffic
